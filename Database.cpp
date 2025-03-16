@@ -2,6 +2,11 @@
 #include "Logger.h"
 #include <sstream>
 #include <chrono>
+#include <fstream>
+#include <random>
+#include <openssl/sha.h>
+#include <openssl/rand.h>
+#include <iomanip>
 
 static int callback(void *unused, int count, char **data, char **columns) {
     // we won't use this, just a placeholder
@@ -13,32 +18,33 @@ Database& Database::instance() {
     return instance;
 }
 
-Database::Database() : db_(nullptr), running_(true) {
-    if (sqlite3_open("chat_history.db", &db_) != SQLITE_OK) {
-        Logger::instance().log(LogLevel::ERROR,
-            "Can't open database: " + std::string(sqlite3_errmsg(db_)));
-    } else {
-        // Create table for main chat messages
-        std::string sql_messages =
-            "CREATE TABLE IF NOT EXISTS messages ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "username TEXT NOT NULL, "
-            "message TEXT NOT NULL, "
-            "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP"
-            ");";
-        exec_sql(sql_messages);
-
-        // Create table for offline messages
-        std::string sql_offline =
-            "CREATE TABLE IF NOT EXISTS offline_msgs ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "to_user TEXT NOT NULL, "
-            "message TEXT NOT NULL"
-            ");";
-        exec_sql(sql_offline);
+Database::Database() : db_(nullptr), running_(false) {
+    int rc = sqlite3_open("chat.db", &db_);
+    if (rc) {
+        Logger::log("Can't open database: " + std::string(sqlite3_errmsg(db_)), LogLevel::ERROR);
+        return;
     }
 
-    // Start aggregator thread
+    // Create tables if they don't exist
+    exec_sql("CREATE TABLE IF NOT EXISTS messages ("
+             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+             "username TEXT NOT NULL,"
+             "message TEXT NOT NULL,"
+             "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);");
+
+    exec_sql("CREATE TABLE IF NOT EXISTS offline_messages ("
+             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+             "to_user TEXT NOT NULL,"
+             "message TEXT NOT NULL,"
+             "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);");
+
+    exec_sql("CREATE TABLE IF NOT EXISTS users ("
+             "username TEXT PRIMARY KEY,"
+             "salt TEXT NOT NULL,"
+             "password_hash TEXT NOT NULL);");
+
+    loadUsers();
+    running_ = true;
     aggregator_thread_ = std::thread(&Database::db_aggregator_main, this);
 }
 
@@ -190,4 +196,65 @@ void Database::stop_aggregator() {
     if (aggregator_thread_.joinable()) {
         aggregator_thread_.join();
     }
+}
+
+bool Database::verifyUser(const std::string& username, const std::string& password) {
+    Logger::log("Verifying user: " + username, LogLevel::DEBUG);
+    auto it = users.find(username);
+    if (it == users.end()) {
+        return false;
+    }
+    // Hash the incoming password with the stored salt
+    std::string hashedIncoming = hashPassword(password, it->second.salt);
+    return (hashedIncoming == it->second.passHash);
+}
+
+void Database::loadUsers() {
+    const char* sql = "SELECT username, salt, password_hash FROM users;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        Logger::log("Failed to load users: " + std::string(sqlite3_errmsg(db_)), LogLevel::ERROR);
+        return;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::string username = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        std::string salt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        std::string passHash = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        users[username] = UserRecord{salt, passHash};
+    }
+    sqlite3_finalize(stmt);
+    Logger::log("Users loaded from database", LogLevel::INFO);
+}
+
+std::string Database::generateSalt(size_t length) {
+    static const char chars[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+    thread_local static std::random_device rd;
+    thread_local static std::mt19937 gen(rd());
+    thread_local static std::uniform_int_distribution<> dist(0, sizeof(chars) - 2);
+
+    std::string salt;
+    salt.reserve(length);
+    for (size_t i = 0; i < length; ++i) {
+        salt.push_back(chars[dist(gen)]);
+    }
+    return salt;
+}
+
+std::string Database::hashPassword(const std::string& password, const std::string& salt) {
+    // For demonstration, just do SHA256( salt + password )
+    std::string combined = salt + password;
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(combined.c_str()), combined.size(), hash);
+
+    // Convert to hex string
+    std::ostringstream oss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    }
+    return oss.str();
 } 

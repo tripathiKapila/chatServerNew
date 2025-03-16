@@ -1,5 +1,4 @@
-#ifndef SESSION_H
-#define SESSION_H
+#pragma once
 
 #include <boost/asio.hpp>
 #include <memory>
@@ -47,12 +46,8 @@ private:
 
     bool authenticated_;
     std::string username_;
-
-    // Idle timeout in seconds (from config or default)
     int idle_timeout_seconds_;
 
     // The command router (each session has one to handle commands)
     CommandRouter command_router_;
-};
-
-#endif // SESSION_H 
+}; 

@@ -1,14 +1,23 @@
-#ifndef SERVER_H
-#define SERVER_H
-
+#pragma once
 #include <boost/asio.hpp>
+#include <memory>
+#include <vector>
+#include "Session.h"
+#include "Network/ThreadPool.h"
 
 class Server {
 public:
-    Server(boost::asio::io_context& io_context, short port);
-private:
-    void do_accept();
-    boost::asio::ip::tcp::acceptor acceptor_;
-};
+    Server(boost::asio::io_context& io_context, short port, int maxConnections);
+    void start();
+    void stop();
 
-#endif // SERVER_H 
+private:
+    void acceptLoop();
+    void handleClient(boost::asio::ip::tcp::socket socket);
+
+    boost::asio::ip::tcp::acceptor acceptor_;
+    boost::asio::io_context& io_context_;
+    int maxConnections_;
+    std::atomic<bool> running_;
+    ThreadPool threadPool_;
+}; 

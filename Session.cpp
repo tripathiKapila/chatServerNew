@@ -17,9 +17,14 @@ extern boost::asio::io_context* g_io_context_ptr;
 Session::Session(boost::asio::ip::tcp::socket socket)
     : socket_(std::move(socket)),
       idle_timer_(socket_.get_executor()),
-      authenticated_(false),
-      idle_timeout_seconds_(Config::instance().get_int("idle_timeout", 300))
+      authenticated_(false)
 {
+    // Load session timeout from config
+    std::string timeout_str = Config::getInstance().getValue("session_timeout", "300");
+    idle_timeout_seconds_ = std::stoi(timeout_str);
+    
+    Logger::log("New session created with timeout: " + std::to_string(idle_timeout_seconds_), LogLevel::INFO);
+
     // Attach "this" session pointer to the command router
     command_router_.set_session(shared_from_this());
 }
@@ -116,7 +121,7 @@ void Session::start_idle_timer() {
     idle_timer_.async_wait([this, self](const boost::system::error_code& ec) {
         if (!ec) {
             deliver("Idle timeout. Disconnecting...");
-            Logger::instance().log(LogLevel::INFO, "Session timed out for user: " + username_);
+            Logger::log("Session timed out for user: " + username_, LogLevel::INFO);
             force_disconnect();
         }
     });

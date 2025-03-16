@@ -211,11 +211,29 @@ ChatServer_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 ChatServer_SOURCE_DIR:STATIC=C:/Users/kapil/OneDrive/Desktop/boost
 
+//Path to a library.
+LIB_EAY_DEBUG:FILEPATH=C:/vcpkg/installed/x64-windows/debug/lib/libcrypto.lib
+
+//Path to a library.
+LIB_EAY_RELEASE:FILEPATH=C:/vcpkg/installed/x64-windows/lib/libcrypto.lib
+
+//Path to a file.
+OPENSSL_APPLINK_SOURCE:FILEPATH=C:/vcpkg/installed/x64-windows/include/openssl/applink.c
+
+//Path to a file.
+OPENSSL_INCLUDE_DIR:PATH=C:/vcpkg/installed/x64-windows/include
+
 //Path to a file.
 SQLite3_INCLUDE_DIR:PATH=C:/vcpkg/installed/x64-windows/include
 
 //Path to a library.
 SQLite3_LIBRARY:FILEPATH=C:/vcpkg/installed/x64-windows/debug/lib/sqlite3.lib
+
+//Path to a library.
+SSL_EAY_DEBUG:FILEPATH=C:/vcpkg/installed/x64-windows/debug/lib/libssl.lib
+
+//Path to a library.
+SSL_EAY_RELEASE:FILEPATH=C:/vcpkg/installed/x64-windows/lib/libssl.lib
 
 //Automatically copy dependencies into the output directory for
 // executables.
@@ -556,8 +574,12 @@ CMAKE_TOOLCHAIN_FILE-ADVANCED:INTERNAL=1
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding Boost
 FIND_PACKAGE_MESSAGE_DETAILS_Boost:INTERNAL=[C:/vcpkg/installed/x64-windows/share/boost/BoostConfig.cmake][cfound components: system thread ][v1.86.0()]
+//Details about finding OpenSSL
+FIND_PACKAGE_MESSAGE_DETAILS_OpenSSL:INTERNAL=[optimized;C:/vcpkg/installed/x64-windows/lib/libcrypto.lib;debug;C:/vcpkg/installed/x64-windows/debug/lib/libcrypto.lib][C:/vcpkg/installed/x64-windows/include][c ][v3.4.0()]
 //Details about finding SQLite3
 FIND_PACKAGE_MESSAGE_DETAILS_SQLite3:INTERNAL=[C:/vcpkg/installed/x64-windows/include][C:/vcpkg/installed/x64-windows/debug/lib/sqlite3.lib][v3.48.0()]
+//ADVANCED property for variable: OPENSSL_INCLUDE_DIR
+OPENSSL_INCLUDE_DIR-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: SQLite3_INCLUDE_DIR
 SQLite3_INCLUDE_DIR-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: SQLite3_LIBRARY

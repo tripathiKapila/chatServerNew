@@ -3,6 +3,7 @@
 #include <vector>
 #include <atomic>
 #include <iostream>
+#include <signal.h>
 
 #include "Server.h"
 #include "Logger.h"
@@ -15,6 +16,12 @@ boost::asio::io_context* g_io_context_ptr = nullptr;
 
 // Counter for performance monitoring
 std::atomic<int> g_messageCount(0);
+
+std::atomic<bool> running(true);
+
+void signalHandler(int signum) {
+    running = false;
+}
 
 void performance_monitor(boost::asio::io_context &io_context) {
     using namespace std::chrono_literals;
@@ -29,18 +36,32 @@ void performance_monitor(boost::asio::io_context &io_context) {
     });
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Set up signal handlers
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
     try {
         boost::asio::io_context io_context;
         g_io_context_ptr = &io_context;
 
-        // Load config file (server.config) if it exists
-        if (!Config::instance().load("server.config")) {
-            Logger::instance().log(LogLevel::ERROR,
-                "Failed to load server.config. Using default settings.");
-        } else {
-            Logger::instance().log(LogLevel::INFO, "Configuration loaded successfully.");
-        }
+        // Load configuration
+        Config config("server.config");
+        int port = std::stoi(config.getValue("port", "12345"));
+        int maxConnections = std::stoi(config.getValue("max_connections", "100"));
+        std::string logLevel = config.getValue("log_level", "INFO");
+
+        // Set up logging
+        if (logLevel == "DEBUG") Logger::setLogLevel(LogLevel::DEBUG);
+        else if (logLevel == "WARN") Logger::setLogLevel(LogLevel::WARN);
+        else if (logLevel == "ERROR") Logger::setLogLevel(LogLevel::ERROR);
+        else Logger::setLogLevel(LogLevel::INFO);
+
+        Logger::log("Starting chat server...", LogLevel::INFO);
+        Logger::log("Configuration loaded:", LogLevel::DEBUG);
+        Logger::log("Port: " + std::to_string(port), LogLevel::DEBUG);
+        Logger::log("Max connections: " + std::to_string(maxConnections), LogLevel::DEBUG);
+        Logger::log("Log level: " + logLevel, LogLevel::DEBUG);
 
         // Initialize Database (also starts the DB aggregator thread)
         Database::instance(); 
@@ -48,32 +69,26 @@ int main() {
         // Start performance monitoring
         performance_monitor(io_context);
 
-        int port = Config::instance().get_int("port", 12345);
-        Server server(io_context, static_cast<short>(port));
+        // Create and start server
+        Server server(io_context, static_cast<short>(port), maxConnections);
+        server.start();
 
-        // Prepare thread pool
-        const int num_threads = std::thread::hardware_concurrency();
-        std::vector<std::thread> threads;
-        for (int i = 0; i < num_threads; ++i) {
-            threads.emplace_back([&io_context]() {
-                io_context.run();
-            });
+        // Main loop
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
 
-        Logger::instance().log(LogLevel::INFO,
-            "Server is running on port " + std::to_string(port) +
-            " with " + std::to_string(num_threads) + " threads.");
-
-        // Wait for all threads
-        for (auto& t : threads) {
-            t.join();
-        }
+        // Clean shutdown
+        Logger::log("Shutting down server...", LogLevel::INFO);
+        server.stop();
 
         // Ensure DB aggregator thread stops gracefully
         Database::instance().stop_aggregator();
 
-    } catch (std::exception &e) {
-        Logger::instance().log(LogLevel::ERROR, std::string("Exception in main: ") + e.what());
+    } catch (const std::exception& e) {
+        Logger::log("Fatal error: " + std::string(e.what()), LogLevel::ERROR);
+        return 1;
     }
+
     return 0;
 } 

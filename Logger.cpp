@@ -1,11 +1,15 @@
 #include "Logger.h"
 #include <iostream>
-#include <ctime>
 #include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <sstream>
 #include <filesystem>
 
 namespace fs = std::filesystem;
+
+LogLevel Logger::currentLevel = LogLevel::INFO;
+std::mutex Logger::logMutex;
 
 Logger& Logger::instance() {
     static Logger instance;
@@ -16,8 +20,8 @@ Logger::Logger() : current_level_(LogLevel::DEBUG) {
     log_file_.open("server.log", std::ios::app);
 }
 
-void Logger::set_log_level(LogLevel level) {
-    current_level_ = level;
+void Logger::setLogLevel(LogLevel level) {
+    currentLevel = level;
 }
 
 void Logger::rotate_if_needed() {
@@ -29,31 +33,32 @@ void Logger::rotate_if_needed() {
     }
 }
 
-void Logger::log(LogLevel level, const std::string &message) {
-    if (static_cast<int>(level) < static_cast<int>(current_level_)) return;
-    std::lock_guard<std::mutex> lock(mtx_);
+void Logger::log(const std::string& message, LogLevel level) {
+    std::lock_guard<std::mutex> lock(logMutex);
+    if (level < currentLevel) return;
 
-    rotate_if_needed();
-
+    // Get current time
     auto now = std::chrono::system_clock::now();
-    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    auto tt = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime;
+#ifdef _WIN32
+    localtime_s(&localTime, &tt);
+#else
+    localtime_r(&tt, &localTime);
+#endif
+    char timeBuf[32];
+    std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &localTime);
 
-    std::stringstream ss;
-    ss << std::ctime(&now_time);
-    std::string time_str = ss.str();
-    if (!time_str.empty() && time_str.back() == '\n') {
-        time_str.pop_back();
+    // Convert LogLevel to string
+    std::string levelStr;
+    switch (level) {
+        case LogLevel::DEBUG: levelStr = "DEBUG"; break;
+        case LogLevel::INFO:  levelStr = "INFO";  break;
+        case LogLevel::WARN:  levelStr = "WARN";  break;
+        case LogLevel::ERROR: levelStr = "ERROR"; break;
     }
 
-    std::string level_str;
-    switch(level) {
-        case LogLevel::DEBUG: level_str = "DEBUG"; break;
-        case LogLevel::INFO: level_str = "INFO"; break;
-        case LogLevel::ERROR: level_str = "ERROR"; break;
-    }
-
-    std::string log_entry = "[" + time_str + "][" + level_str + "] " + message;
-    std::cout << log_entry << std::endl;
-    log_file_ << log_entry << std::endl;
-    log_file_.flush();
+    std::cerr << "[" << timeBuf << "] "
+              << "[" << levelStr << "] "
+              << message << std::endl;
 } 

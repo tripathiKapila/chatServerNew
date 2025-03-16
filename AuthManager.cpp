@@ -3,68 +3,88 @@
 #include "Config.h"
 #include <functional> // for std::hash
 #include <sstream>
-
-AuthManager& AuthManager::instance() {
-    static AuthManager instance;
-    return instance;
-}
+#include <openssl/sha.h>
+#include <openssl/rand.h>
+#include <iomanip>
 
 AuthManager::AuthManager() {
-    // Load admin user/pass from config
-    // If not found, defaults to "admin":"admin123"
-    auto admin_u = Config::instance().get("admin_user", "admin");
-    auto admin_p = Config::instance().get("admin_pass", "admin123");
-
-    std::hash<std::string> hasher;
-    admin_user_ = admin_u;
-    admin_hash_ = hasher(admin_p);
-
-    // Insert admin credentials into map
-    credentials_[admin_user_] = admin_hash_;
-
-    Logger::instance().log(LogLevel::INFO,
-        "AuthManager: admin user loaded: " + admin_user_);
+    // Load admin credentials from config
+    adminUser_ = Config::getInstance().getValue("admin_user", "admin");
+    std::string adminPass = Config::getInstance().getValue("admin_pass", "admin123");
+    
+    // Hash admin password
+    std::string hashedPass = hashPassword(adminPass);
+    
+    // Store admin credentials
+    credentials_[adminUser_] = hashedPass;
+    userRoles_[adminUser_] = UserRole::ADMIN;
+    
+    Logger::log("AuthManager initialized with admin user: " + adminUser_, LogLevel::INFO);
 }
 
-bool AuthManager::authenticate(const std::string &username, const std::string &password) {
+bool AuthManager::authenticate(const std::string& username, const std::string& password) {
     std::lock_guard<std::mutex> lock(mtx_);
-    std::hash<std::string> hasher;
-    auto pass_hash = hasher(password);
-
+    std::string hashedPass = hashPassword(password);
     auto it = credentials_.find(username);
     if (it != credentials_.end()) {
-        return (it->second == pass_hash);
+        return (it->second == hashedPass);
     }
     return false;
 }
 
-bool AuthManager::register_user(const std::string &username, const std::string &password) {
+bool AuthManager::registerUser(const std::string& username, const std::string& password) {
     std::lock_guard<std::mutex> lock(mtx_);
     if (credentials_.find(username) != credentials_.end()) {
-        // user already exists
-        return false;
+        return false; // User already exists
     }
-    std::hash<std::string> hasher;
-    credentials_[username] = hasher(password);
+    credentials_[username] = hashPassword(password);
+    userRoles_[username] = UserRole::USER;
     return true;
 }
 
-bool AuthManager::is_admin(const std::string &username) {
-    return (username == admin_user_);
+bool AuthManager::isAdmin(const std::string& username) const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto it = userRoles_.find(username);
+    return (it != userRoles_.end() && it->second == UserRole::ADMIN);
 }
 
-void AuthManager::push_status(const std::string &username, const std::string &status) {
+void AuthManager::setUserRole(const std::string& username, UserRole role) {
     std::lock_guard<std::mutex> lock(mtx_);
-    status_history_[username].push(status);
+    userRoles_[username] = role;
 }
 
-std::string AuthManager::pop_status(const std::string &username) {
+UserRole AuthManager::getUserRole(const std::string& username) const {
     std::lock_guard<std::mutex> lock(mtx_);
-    auto &stack = status_history_[username];
+    auto it = userRoles_.find(username);
+    return (it != userRoles_.end() ? it->second : UserRole::USER);
+}
+
+void AuthManager::pushStatus(const std::string& username, const std::string& status) {
+    std::lock_guard<std::mutex> lock(mtx_);
+    statusHistory_[username].push(status);
+}
+
+std::string AuthManager::popStatus(const std::string& username) {
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto& stack = statusHistory_[username];
     if (stack.empty()) {
         return "";
     }
-    std::string old_status = stack.top();
+    std::string oldStatus = stack.top();
     stack.pop();
-    return old_status;
+    return oldStatus;
+}
+
+std::string AuthManager::hashPassword(const std::string& password) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, password.c_str(), password.size());
+    SHA256_Final(hash, &sha256);
+
+    std::stringstream ss;
+    for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    }
+    return ss.str();
 } 

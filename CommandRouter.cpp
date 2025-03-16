@@ -49,11 +49,11 @@ void CommandRouter::handle_broadcast(const std::string &message) {
     std::string broadcast_msg = session_->get_username() + ": " + message;
 
     // Log to DB (batch aggregator) and store in memory cache
-    Database::instance().log_message(session_->get_username(), message);
-    ChatHistoryCache::instance().add_message(broadcast_msg);
+    Database::getInstance().log_message(session_->get_username(), message);
+    ChatHistoryCache::getInstance().add_message(broadcast_msg);
 
     // Broadcast to others
-    SessionManager::instance().broadcast(broadcast_msg, session_);
+    SessionManager::getInstance().broadcast(broadcast_msg, session_);
 }
 
 void CommandRouter::register_commands() {
@@ -87,25 +87,25 @@ void CommandRouter::cmd_login(const std::string &args) {
     }
 
     // Attempt authentication
-    if (AuthManager::instance().authenticate(uname, pwd)) {
+    if (AuthManager::getInstance().authenticate(uname, pwd)) {
         session_->set_authenticated(true);
         session_->set_username(uname);
-        UserManager::instance().add_user(uname, session_);
-        SessionManager::instance().add_session(session_);
+        UserManager::getInstance().add_user(uname, session_);
+        SessionManager::getInstance().add_session(session_);
 
         // Deliver offline messages if any
-        auto offline_msgs = Database::instance().retrieve_offline_messages(uname);
+        auto offline_msgs = Database::getInstance().retrieve_offline_messages(uname);
         if (!offline_msgs.empty()) {
             session_->deliver("You have offline messages:");
             for (auto &msg : offline_msgs) {
                 session_->deliver(msg);
             }
             // Clear them from DB
-            Database::instance().clear_offline_messages(uname);
+            Database::getInstance().clear_offline_messages(uname);
         }
 
         session_->deliver("Login successful. Welcome, " + uname + "!");
-        Logger::instance().log(LogLevel::INFO, "User logged in: " + uname);
+        Logger::log("User logged in: " + uname, LogLevel::INFO);
     } else {
         session_->deliver("Authentication failed. Use /login <username> <password>");
     }
@@ -120,10 +120,10 @@ void CommandRouter::cmd_logout(const std::string &/*args*/) {
     std::string uname = session_->get_username();
     session_->set_authenticated(false);
     session_->set_username("");
-    UserManager::instance().remove_user(uname);
-    SessionManager::instance().remove_session(session_);
+    UserManager::getInstance().remove_user(uname);
+    SessionManager::getInstance().remove_session(session_);
     session_->deliver("You have been logged out.");
-    Logger::instance().log(LogLevel::INFO, "User logged out: " + uname);
+    Logger::log("User logged out: " + uname, LogLevel::INFO);
 }
 
 void CommandRouter::cmd_msg(const std::string &args) {
@@ -145,7 +145,7 @@ void CommandRouter::cmd_msg(const std::string &args) {
         return;
     }
 
-    auto target_session = UserManager::instance().get_user(target_user);
+    auto target_session = UserManager::getInstance().get_user(target_user);
     if (target_session) {
         // The user is online, deliver immediately
         std::string private_msg = "[Private] " + session_->get_username() + ": " + message;
@@ -153,13 +153,13 @@ void CommandRouter::cmd_msg(const std::string &args) {
         session_->deliver("[Private to " + target_user + "] " + message);
 
         // Log and cache
-        Database::instance().log_message(session_->get_username(),
+        Database::getInstance().log_message(session_->get_username(),
                                          "[Private to " + target_user + "] " + message);
-        ChatHistoryCache::instance().add_message(private_msg);
+        ChatHistoryCache::getInstance().add_message(private_msg);
     } else {
         // The user might be offline, store it as an offline message
         session_->deliver("User " + target_user + " is offline or not found. Storing offline.");
-        Database::instance().store_offline_message(target_user,
+        Database::getInstance().store_offline_message(target_user,
             "[Private] " + session_->get_username() + ": " + message);
     }
 }
@@ -167,8 +167,8 @@ void CommandRouter::cmd_msg(const std::string &args) {
 void CommandRouter::cmd_history(const std::string &/*args*/) {
     if (!session_) return;
 
-    std::string db_history = Database::instance().get_chat_history();
-    auto recent = ChatHistoryCache::instance().get_recent_messages();
+    std::string db_history = Database::getInstance().get_chat_history();
+    auto recent = ChatHistoryCache::getInstance().get_recent_messages();
 
     session_->deliver("===== Full Chat History (DB) =====\n" + db_history);
     session_->deliver("===== Recent In-Memory =====");
@@ -191,13 +191,12 @@ void CommandRouter::cmd_status(const std::string &args) {
         return;
     }
 
-    UserManager::instance().update_status(session_->get_username(), status);
+    UserManager::getInstance().update_status(session_->get_username(), status);
     session_->deliver("Status updated to " + status);
-    Logger::instance().log(LogLevel::INFO,
-        "User " + session_->get_username() + " updated status to " + status);
+    Logger::log("User " + session_->get_username() + " updated status to " + status, LogLevel::INFO);
 
     // We store statuses in AuthManager's user record for undo
-    AuthManager::instance().push_status(session_->get_username(), status);
+    AuthManager::getInstance().pushStatus(session_->get_username(), status);
 }
 
 void CommandRouter::cmd_undo(const std::string &/*args*/) {
@@ -207,21 +206,20 @@ void CommandRouter::cmd_undo(const std::string &/*args*/) {
         return;
     }
 
-    std::string old_status = AuthManager::instance().pop_status(session_->get_username());
+    std::string old_status = AuthManager::getInstance().popStatus(session_->get_username());
     if (old_status.empty()) {
         session_->deliver("No previous status to revert to.");
     } else {
-        UserManager::instance().update_status(session_->get_username(), old_status);
+        UserManager::getInstance().update_status(session_->get_username(), old_status);
         session_->deliver("Reverted status to " + old_status);
-        Logger::instance().log(LogLevel::INFO,
-            "User " + session_->get_username() + " reverted status to " + old_status);
+        Logger::log("User " + session_->get_username() + " reverted status to " + old_status, LogLevel::INFO);
     }
 }
 
 void CommandRouter::cmd_shutdown(const std::string &/*args*/) {
     if (!session_) return;
     // Must be admin
-    if (!AuthManager::instance().is_admin(session_->get_username())) {
+    if (!AuthManager::getInstance().isAdmin(session_->get_username())) {
         session_->deliver("You are not authorized to shut down the server.");
         return;
     }
@@ -229,22 +227,22 @@ void CommandRouter::cmd_shutdown(const std::string &/*args*/) {
     session_->deliver("Shutting down server...");
 
     // Gracefully stop all sessions first
-    SessionManager::instance().close_all_sessions();
+    SessionManager::getInstance().close_all_sessions();
 
     // Now stop io_context
     if (g_io_context_ptr) {
         g_io_context_ptr->stop();
     }
-    Logger::instance().log(LogLevel::INFO, "Server shutdown initiated by admin.");
+    Logger::log("Server shutdown initiated by admin.", LogLevel::INFO);
 }
 
 void CommandRouter::cmd_list(const std::string &/*args*/) {
     if (!session_) return;
-    if (!AuthManager::instance().is_admin(session_->get_username())) {
+    if (!AuthManager::getInstance().isAdmin(session_->get_username())) {
         session_->deliver("You are not authorized to use /list.");
         return;
     }
-    auto users = UserManager::instance().get_all_users();
+    auto users = UserManager::getInstance().get_all_users();
     std::string user_list = "Active Users:\n";
     for (const auto &u : users) {
         user_list += "  " + u + "\n";
@@ -259,7 +257,7 @@ void CommandRouter::cmd_search(const std::string &args) {
         session_->deliver("Usage: /search <keyword>");
         return;
     }
-    auto results = ChatHistoryCache::instance().search(args);
+    auto results = ChatHistoryCache::getInstance().search(args);
     if (results.empty()) {
         session_->deliver("No messages found matching '" + args + "'.");
     } else {

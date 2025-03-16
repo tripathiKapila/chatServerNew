@@ -34,6 +34,9 @@
     <ClCompile Include="C:\Users\kapil\OneDrive\Desktop\boost\Database.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\Users\kapil\OneDrive\Desktop\boost\Network\ThreadPool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="C:\Users\kapil\OneDrive\Desktop\boost\CMakeLists.txt" />

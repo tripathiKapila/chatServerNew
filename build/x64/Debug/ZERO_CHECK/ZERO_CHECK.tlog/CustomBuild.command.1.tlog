@@ -1,0 +1,10 @@
+^C:\USERS\KAPIL\ONEDRIVE\DESKTOP\BOOST\BUILD\CMAKEFILES\19CBA093F29F18E2210D8FB45F16016E\GENERATE.STAMP.RULE
+setlocal
+C:\mingw64\bin\cmake.exe -SC:/Users/kapil/OneDrive/Desktop/boost -BC:/Users/kapil/OneDrive/Desktop/boost/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/kapil/OneDrive/Desktop/boost/build/ChatServer.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

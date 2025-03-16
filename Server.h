@@ -1,6 +1,8 @@
 #pragma once
 #include <boost/asio.hpp>
 #include <memory>
+#include <atomic>
+#include <thread>
 #include <vector>
 #include "Session.h"
 #include "Network/ThreadPool.h"
@@ -8,6 +10,7 @@
 class Server {
 public:
     Server(boost::asio::io_context& io_context, short port, int maxConnections);
+    ~Server();
     void start();
     void stop();
 

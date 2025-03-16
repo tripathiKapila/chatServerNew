@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <unordered_map>
-#include <mutex>
+#include <memory>
 
 class Config {
 public:
@@ -10,8 +10,8 @@ public:
         return instance;
     }
 
+    void load(const std::string& configFile);
     std::string getValue(const std::string& key, const std::string& defaultValue = "") const;
-    bool load(const std::string& filename);
     int getInt(const std::string& key, int defaultValue = 0) const;
     void reload(const std::string& filename);
 
@@ -23,5 +23,4 @@ private:
     std::string configFileName;
     std::unordered_map<std::string, std::string> configData;
     void loadConfig();
-    mutable std::mutex mtx_;
 }; 

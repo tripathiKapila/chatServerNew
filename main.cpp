@@ -21,6 +21,9 @@ std::atomic<bool> running(true);
 
 void signalHandler(int signum) {
     running = false;
+    if (g_io_context_ptr) {
+        g_io_context_ptr->stop();
+    }
 }
 
 void performance_monitor(boost::asio::io_context &io_context) {
@@ -36,57 +39,39 @@ void performance_monitor(boost::asio::io_context &io_context) {
     });
 }
 
-int main(int argc, char* argv[]) {
-    // Set up signal handlers
-    signal(SIGINT, signalHandler);
-    signal(SIGTERM, signalHandler);
-
+int main() {
     try {
-        boost::asio::io_context io_context;
-        g_io_context_ptr = &io_context;
+        // Set up signal handling
+        signal(SIGINT, signalHandler);
+        signal(SIGTERM, signalHandler);
 
         // Load configuration
-        Config config("server.config");
-        int port = std::stoi(config.getValue("port", "12345"));
-        int maxConnections = std::stoi(config.getValue("max_connections", "100"));
-        std::string logLevel = config.getValue("log_level", "INFO");
+        Config::getInstance().load("server.config");
+        int port = Config::getInstance().getInt("port", 12345);
+        int maxConnections = Config::getInstance().getInt("max_connections", 100);
+        std::string logLevel = Config::getInstance().getValue("log_level", "INFO");
 
         // Set up logging
-        if (logLevel == "DEBUG") Logger::setLogLevel(LogLevel::DEBUG);
-        else if (logLevel == "WARN") Logger::setLogLevel(LogLevel::WARN);
-        else if (logLevel == "ERROR") Logger::setLogLevel(LogLevel::ERROR);
-        else Logger::setLogLevel(LogLevel::INFO);
-
-        Logger::log("Starting chat server...", LogLevel::INFO);
-        Logger::log("Configuration loaded:", LogLevel::DEBUG);
-        Logger::log("Port: " + std::to_string(port), LogLevel::DEBUG);
-        Logger::log("Max connections: " + std::to_string(maxConnections), LogLevel::DEBUG);
-        Logger::log("Log level: " + logLevel, LogLevel::DEBUG);
-
-        // Initialize Database (also starts the DB aggregator thread)
-        Database::instance(); 
-
-        // Start performance monitoring
-        performance_monitor(io_context);
+        Logger::setLogLevel(logLevel);
 
         // Create and start server
-        Server server(io_context, static_cast<short>(port), maxConnections);
+        boost::asio::io_context io_context;
+        g_io_context_ptr = &io_context;
+        
+        Server server(io_context, port, maxConnections);
         server.start();
 
-        // Main loop
+        // Run the io_context
         while (running) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            io_context.run_one();
         }
 
         // Clean shutdown
-        Logger::log("Shutting down server...", LogLevel::INFO);
         server.stop();
+        Logger::log("Server shutdown complete", LogLevel::INFO);
 
-        // Ensure DB aggregator thread stops gracefully
-        Database::instance().stop_aggregator();
-
-    } catch (const std::exception& e) {
-        Logger::log("Fatal error: " + std::string(e.what()), LogLevel::ERROR);
+    } catch (std::exception& e) {
+        Logger::log("Exception: " + std::string(e.what()), LogLevel::ERROR);
         return 1;
     }
 

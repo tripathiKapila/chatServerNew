@@ -1,5 +1,4 @@
-#ifndef USERMANAGER_H
-#define USERMANAGER_H
+#pragma once
 
 #include <string>
 #include <memory>
@@ -10,18 +9,25 @@
 
 class UserManager {
 public:
-    static UserManager& instance();
-    void add_user(const std::string &username, std::shared_ptr<Session> session);
-    void remove_user(const std::string &username);
-    std::shared_ptr<Session> get_user(const std::string &username);
-    void update_status(const std::string &username, const std::string &status);
+    static UserManager& getInstance() {
+        static UserManager instance;
+        return instance;
+    }
+
+    void add_user(const std::string& username, std::shared_ptr<Session> session);
+    void remove_user(const std::string& username);
+    std::shared_ptr<Session> get_user(const std::string& username);
+    void update_status(const std::string& username, const std::string& status);
     std::vector<std::string> get_all_users();
 
 private:
     UserManager() = default;
-    std::unordered_map<std::string, std::shared_ptr<Session>> users_;
-    std::unordered_map<std::string, std::string> user_status_;
-    std::mutex mtx_;
-};
+    ~UserManager() = default;
 
-#endif // USERMANAGER_H 
+    UserManager(const UserManager&) = delete;
+    UserManager& operator=(const UserManager&) = delete;
+
+    std::unordered_map<std::string, std::shared_ptr<Session>> users;
+    std::unordered_map<std::string, std::string> user_status_;
+    std::mutex usersMutex;
+}; 

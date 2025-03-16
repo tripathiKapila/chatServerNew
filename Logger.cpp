@@ -5,11 +5,13 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
 LogLevel Logger::currentLevel = LogLevel::INFO;
 std::mutex Logger::logMutex;
+std::ofstream Logger::logFile("server.log");
 
 Logger& Logger::instance() {
     static Logger instance;
@@ -20,7 +22,19 @@ Logger::Logger() : current_level_(LogLevel::DEBUG) {
     log_file_.open("server.log", std::ios::app);
 }
 
+void Logger::setLogLevel(const std::string& level) {
+    std::string upperLevel = level;
+    std::transform(upperLevel.begin(), upperLevel.end(), upperLevel.begin(), ::toupper);
+    
+    if (upperLevel == "DEBUG") setLogLevel(LogLevel::DEBUG);
+    else if (upperLevel == "INFO") setLogLevel(LogLevel::INFO);
+    else if (upperLevel == "WARN") setLogLevel(LogLevel::WARN);
+    else if (upperLevel == "ERROR") setLogLevel(LogLevel::ERROR);
+    else setLogLevel(LogLevel::INFO); // Default to INFO if unknown
+}
+
 void Logger::setLogLevel(LogLevel level) {
+    std::lock_guard<std::mutex> lock(logMutex);
     currentLevel = level;
 }
 
@@ -34,31 +48,30 @@ void Logger::rotate_if_needed() {
 }
 
 void Logger::log(const std::string& message, LogLevel level) {
-    std::lock_guard<std::mutex> lock(logMutex);
-    if (level < currentLevel) return;
-
-    // Get current time
-    auto now = std::chrono::system_clock::now();
-    auto tt = std::chrono::system_clock::to_time_t(now);
-    std::tm localTime;
-#ifdef _WIN32
-    localtime_s(&localTime, &tt);
-#else
-    localtime_r(&tt, &localTime);
-#endif
-    char timeBuf[32];
-    std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &localTime);
-
-    // Convert LogLevel to string
-    std::string levelStr;
-    switch (level) {
-        case LogLevel::DEBUG: levelStr = "DEBUG"; break;
-        case LogLevel::INFO:  levelStr = "INFO";  break;
-        case LogLevel::WARN:  levelStr = "WARN";  break;
-        case LogLevel::ERROR: levelStr = "ERROR"; break;
+    if (level >= currentLevel) {
+        std::lock_guard<std::mutex> lock(logMutex);
+        auto now = std::time(nullptr);
+        auto tm = *std::localtime(&now);
+        std::string timestamp = std::to_string(std::mktime(&tm));
+        std::string levelStr = levelToString(level);
+        
+        std::string logMessage = "[" + timestamp + "] [" + levelStr + "] " + message + "\n";
+        std::cout << logMessage;
+        logFile << logMessage;
+        logFile.flush();
     }
+}
 
-    std::cerr << "[" << timeBuf << "] "
-              << "[" << levelStr << "] "
-              << message << std::endl;
+void Logger::log(LogLevel level, const std::string& message) {
+    log(message, level);
+}
+
+std::string Logger::levelToString(LogLevel level) {
+    switch (level) {
+        case LogLevel::DEBUG: return "DEBUG";
+        case LogLevel::INFO: return "INFO";
+        case LogLevel::WARN: return "WARN";
+        case LogLevel::ERROR: return "ERROR";
+        default: return "UNKNOWN";
+    }
 } 

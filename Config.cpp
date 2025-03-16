@@ -2,13 +2,11 @@
 #include "Logger.h"
 #include <fstream>
 #include <sstream>
-#include <algorithm>
+#include <stdexcept>
 
-bool Config::load(const std::string& filename) {
-    std::lock_guard<std::mutex> lock(mtx_);
-    configFileName = filename;
+void Config::load(const std::string& configFile) {
+    configFileName = configFile;
     loadConfig();
-    return true;
 }
 
 void Config::loadConfig() {
@@ -21,7 +19,9 @@ void Config::loadConfig() {
     std::string line;
     while (std::getline(file, line)) {
         // Skip comments and empty lines
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
 
         // Parse key=value pairs
         size_t pos = line.find('=');
@@ -43,27 +43,24 @@ void Config::loadConfig() {
 }
 
 std::string Config::getValue(const std::string& key, const std::string& defaultValue) const {
-    std::lock_guard<std::mutex> lock(mtx_);
     auto it = configData.find(key);
-    if (it != configData.end()) {
-        return it->second;
-    }
-    return defaultValue;
+    return it != configData.end() ? it->second : defaultValue;
 }
 
 int Config::getInt(const std::string& key, int defaultValue) const {
-    std::lock_guard<std::mutex> lock(mtx_);
     auto it = configData.find(key);
     if (it != configData.end()) {
         try {
             return std::stoi(it->second);
-        } catch (...) {
-            return defaultValue;
+        } catch (const std::exception& e) {
+            Logger::log("Failed to convert config value to int: " + key, LogLevel::ERROR);
         }
     }
     return defaultValue;
 }
 
 void Config::reload(const std::string& filename) {
-    load(filename);
+    configFileName = filename;
+    configData.clear();
+    loadConfig();
 } 

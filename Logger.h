@@ -1,5 +1,4 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#pragma once
 
 #include <string>
 #include <fstream>
@@ -11,7 +10,7 @@
 #endif
 
 enum class LogLevel {
-    DEBUG = 0,
+    DEBUG,
     INFO,
     WARN,
     ERROR
@@ -19,22 +18,14 @@ enum class LogLevel {
 
 class Logger {
 public:
-    static Logger& instance();
-    void log(LogLevel level, const std::string &message);
-    void set_log_level(LogLevel level);
+    static void setLogLevel(const std::string& level);
     static void setLogLevel(LogLevel level);
     static void log(const std::string& message, LogLevel level = LogLevel::INFO);
+    static void log(LogLevel level, const std::string& message);
 
 private:
-    Logger();
-    void rotate_if_needed();
-
-    std::ofstream log_file_;
-    std::mutex mtx_;
-    LogLevel current_level_;
-    const std::streamoff max_size_ = 1024 * 1024; // 1 MB rotation threshold
     static LogLevel currentLevel;
     static std::mutex logMutex;
+    static std::ofstream logFile;
+    static std::string levelToString(LogLevel level);
 };
-
-#endif // LOGGER_H

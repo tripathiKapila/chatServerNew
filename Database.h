@@ -1,5 +1,4 @@
-#ifndef DATABASE_H
-#define DATABASE_H
+#pragma once
 
 #include <sqlite3.h>
 #include <string>
@@ -9,6 +8,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <unordered_map>
+#include <memory>
+#include <atomic>
 
 struct UserRecord {
     std::string salt;      // Random salt
@@ -23,7 +24,11 @@ struct DBMessage {
 
 class Database {
 public:
-    static Database& instance();
+    static Database& getInstance() {
+        static Database instance;
+        return instance;
+    }
+
     void log_message(const std::string &username, const std::string &message);
     std::string get_chat_history();
     void store_offline_message(const std::string &to_user, const std::string &message);
@@ -35,6 +40,10 @@ public:
 private:
     Database();
     ~Database();
+
+    Database(const Database&) = delete;
+    Database& operator=(const Database&) = delete;
+
     bool exec_sql(const std::string &sql);
     void db_aggregator_main();
     static std::string generateSalt(size_t length = 16);
@@ -48,6 +57,13 @@ private:
     std::thread aggregator_thread_;
     bool running_;
     std::unordered_map<std::string, UserRecord> users;
-};
 
-#endif  // DATABASE_H
+    void aggregate_messages();
+    void write_to_file();
+
+    std::string dbFileName;
+    std::vector<std::string> messageBuffer;
+    std::mutex bufferMutex;
+    std::thread aggregatorThread;
+    std::atomic<bool> running;
+};

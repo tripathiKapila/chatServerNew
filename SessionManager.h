@@ -1,25 +1,29 @@
-#ifndef SESSIONMANAGER_H
-#define SESSIONMANAGER_H
+#pragma once
 
-#include <memory>
 #include <vector>
+#include <memory>
 #include <mutex>
 #include "Session.h"
 
 class SessionManager {
 public:
-    static SessionManager& instance();
+    static SessionManager& getInstance() {
+        static SessionManager instance;
+        return instance;
+    }
+
     void add_session(std::shared_ptr<Session> session);
     void remove_session(std::shared_ptr<Session> session);
-    void broadcast(const std::string &message, std::shared_ptr<Session> exclude = nullptr);
-
-    // For graceful shutdown
+    void broadcast(const std::string& message, std::shared_ptr<Session> exclude = nullptr);
     void close_all_sessions();
 
 private:
     SessionManager() = default;
-    std::vector<std::shared_ptr<Session>> sessions_;
-    std::mutex mtx_;
-};
+    ~SessionManager() = default;
 
-#endif // SESSIONMANAGER_H 
+    SessionManager(const SessionManager&) = delete;
+    SessionManager& operator=(const SessionManager&) = delete;
+
+    std::vector<std::shared_ptr<Session>> sessions;
+    std::mutex sessionsMutex;
+}; 
